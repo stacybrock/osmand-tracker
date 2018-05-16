@@ -1,0 +1,233 @@
+<!DOCTYPE html >
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    <title>Tracker</title>
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 600px;
+        margin: 0;
+        padding: 0;
+      }
+      #controls {
+        padding: 10px 0 0 0;
+        text-align: center;
+      }
+      #controls a {
+        padding: 0 10px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="map"></div>
+    <div id="controls">
+         {% if g.previous_track %}
+         <a href='?date={{ g.previous_track }}'>&lt;&lt;&lt; prev day</a>
+         {% endif %}
+         <a href="#" id="toggle_lines" onclick="toggleLines();return false;">show lines</a>
+         {% if g.next_track %}
+         <a href='?date={{ g.next_track }}'>next day &gt;&gt;&gt;</a>
+         {% endif %}
+    </div>
+    <script>
+      var showLines = 0;
+      function toggleLines() {
+        var togglelink = document.getElementById("toggle_lines");
+        if (showLines == 0) {
+          showLines = 1;
+          togglelink.innerHTML = "hide lines";
+        } else {
+          showLines = 0;
+          togglelink.innerHTML = "show lines";
+        }
+        initMap({ redraw: 0, lines: showLines });
+      }
+
+      var map;
+      function initMap({redraw=1, lines=0} = {}) {
+        if (redraw === 1) {
+          map = new google.maps.Map(document.getElementById('map'), {
+              center: new google.maps.LatLng(44.565132, -123.29309),
+              zoom: 12
+          });
+        } else {
+          currentBounds = map.getBounds();
+          map = new google.maps.Map(document.getElementById('map'), {
+              center: map.getCenter(),
+              zoom: map.getZoom()
+          });
+          map.panToBounds(currentBounds);
+        }
+        var infoWindow = new google.maps.InfoWindow;
+        var trackpoints = [];
+
+        var displaydate = getQueryParam('date');
+        if (displaydate) {
+          var url = "track/"+displaydate;
+        } else {
+          var now = new Date();
+          now.setTime(now.getTime() - now.getTimezoneOffset()*60*1000);
+          var url = "track/"+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate());
+        }
+
+        downloadUrl(url, function(data) {
+          var xml = data.responseXML;
+          var markers = xml.documentElement.getElementsByTagName('marker');
+
+          // display points on map
+          var pointcolors = linearColorGradient('#FFFFFF', '#0000FF', markers.length);
+          var counter = 0;
+          Array.prototype.forEach.call(markers, function(markerElem) {
+            var timestamp = markerElem.getAttribute('time');
+            var point = new google.maps.LatLng(
+                parseFloat(markerElem.getAttribute('lat')),
+                parseFloat(markerElem.getAttribute('lon')));
+            var altitude = markerElem.getAttribute('altitude');
+            var speed = markerElem.getAttribute('speed');
+            var bearing = markerElem.getAttribute('bearing');
+
+            var infowincontent = document.createElement('div');
+            var strong = document.createElement('strong');
+            strong.textContent = timestamp;
+            infowincontent.appendChild(strong);
+            infowincontent.appendChild(document.createElement('br'));
+            var pointtext = document.createElement('text');
+            pointtext.textContent = "Location: "+point;
+            infowincontent.appendChild(pointtext);
+            infowincontent.appendChild(document.createElement('br'));
+            var alttext = document.createElement('text');
+            alttext.textContent = "Altitude: "+altitude;
+            infowincontent.appendChild(alttext);
+            infowincontent.appendChild(document.createElement('br'));
+            var speedtext = document.createElement('text');
+            speedtext.textContent = "Speed: "+speed;
+            infowincontent.appendChild(speedtext);
+            infowincontent.appendChild(document.createElement('br'));
+            var dirtext = document.createElement('text');
+            dirtext.textContent = "Bearing: "+bearing;
+            infowincontent.appendChild(dirtext);
+
+            var marker = new google.maps.Marker({
+              map: map,
+              position: point,
+              icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 4,
+                  fillColor: pointcolors[counter],
+                  fillOpacity: 1,
+                  strokeColor: 'black',
+                  strokeWeight: 2
+              },
+            });
+
+            trackpoints.push(point);
+
+            marker.addListener('click', function() {
+              infoWindow.setContent(infowincontent);
+              infoWindow.open(map, marker);
+            });
+
+            counter++;
+          });
+
+          if (lines == 1) {
+            var trackPath = new google.maps.Polyline({
+              path: trackpoints,
+              geodesic: true,
+              strokeColor: '#AAAAAA'
+            });
+            trackPath.setMap(map);
+          }
+
+          if (trackpoints.length !== 0) {
+            map.center = trackpoints[trackpoints.length-1];
+          }
+        });
+      }
+
+      function downloadUrl(url, callback) {
+        var request = window.ActiveXObject ?
+            new ActiveXObject('Microsoft.XMLHTTP') :
+            new XMLHttpRequest;
+
+        request.onreadystatechange = function() {
+          if (request.readyState == 4) {
+            request.onreadystatechange = doNothing;
+            callback(request, request.status);
+          }
+        };
+
+        request.open('GET', url, true);
+        request.send(null);
+      }
+
+      function doNothing() {}
+
+      function getQueryParam(param) {
+        var query = window.location.search.substring(1);
+        var vars = query.split("&");
+        for (var i=0; i<vars.length; i++) {
+          var pair = vars[i].split("=");
+          if(pair[0] == param){return pair[1];}
+        }
+        return(false);
+      }
+
+      function pad(value) {
+        if (value < 10) {
+            return "0"+value;
+        } else {
+            return value;
+        }
+      }
+
+      function hexToRgb(hex) {
+        var rgb = [];
+        for (var i=1; i<hex.length; i=i+2) {
+          rgb.push(parseInt(hex.substring(i,i+2), 16));
+        }
+        return rgb;
+      }
+
+      function rgbToHex(rgb) {
+        var tmp = [];
+        rgb.forEach(function(x, index) {
+          rgb[index] = Math.round(x);
+        });
+        for (var i=0; i<rgb.length; i++) {
+          if (rgb[i] < 16) {
+            tmp.push("0"+rgb[i].toString(16));
+          } else {
+            tmp.push(rgb[i].toString(16));
+          }
+        }
+        return "#"+tmp.join('');
+      }
+
+      function linearColorGradient(startHex, endHex, num) {
+        s = hexToRgb(startHex);
+        e = hexToRgb(endHex);
+        colors = [];
+        for (var i=0; i<num; i++) {
+          colors.push('');
+          rgbVector = [];
+          [0,1,2].forEach(function(x, index) {
+            rgbVector.push(s[x] + (i/(num-1))*(e[x]-s[x]));
+          });
+          colors[i] = rgbToHex(rgbVector);
+        }
+        return colors;
+      }
+    </script>
+    <script async defer
+         src="https://maps.googleapis.com/maps/api/js?key={{ g.GOOGLE_MAPS_API_KEY }}&callback=initMap">
+    </script>
+  </body>
+</html>
