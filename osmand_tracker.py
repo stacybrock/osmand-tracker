@@ -78,14 +78,16 @@ def write_track(trackpoint):
 def in_securezone(lat=0, lon=0):
     # Returns True if coordinates are within the defined secure zone
     point = Point(lon, lat)
-    with fiona.open(SCRIPTPATH + '/securezone.geojson', 'r') as securezone:
-        for polygon in securezone:
-            g = polygon['geometry']
-            assert g['type'] == "Polygon"
-            # pp.pprint(g['coordinates'][0])
-            polygon = Polygon(g['coordinates'][0])
-            return polygon.contains(point)
-    return True
+    try:
+        with fiona.open(SCRIPTPATH + '/securezone.geojson', 'r') as securezone:
+            for polygon in securezone:
+                g = polygon['geometry']
+                assert g['type'] == "Polygon"
+                # pp.pprint(g['coordinates'][0])
+                polygon = Polygon(g['coordinates'][0])
+                return polygon.contains(point)
+    except OSError:
+        return False
 
 def get_adjacent_tracks(date):
     date_str = date.format('YYYYMMDD')
