@@ -125,13 +125,13 @@ def log():
     if not key == os.getenv('TRACKER_DEVICE_KEY', secrets.token_hex(16)): abort(403)
 
     trackpoint = {
-        'latitude': float(request.args.get('lat')), #float('44.54562'),
-        'longitude': float(request.args.get('lon')), #float('-122.31106'), #-123 inside securezone
-        'timestamp': request.args.get('timestamp'), #'1508102861383',
-        'hdop': request.args.get('hdop'), #'4.5509996',
-        'altitude': float(request.args.get('altitude')), #float('161'),
-        'speed': float(request.args.get('speed')), #float('22.09'),
-        'bearing': float(request.args.get('bearing')) #float('256.4')
+        'latitude': float(request.args.get('lat')),
+        'longitude': float(request.args.get('lon')),
+        'timestamp': request.args.get('timestamp'),
+        'hdop': request.args.get('hdop'),
+        'altitude': float(request.args.get('altitude')),
+        'speed': float(request.args.get('speed')),
+        'bearing': float(request.args.get('bearing'))
     }
     pp.pprint(trackpoint)
     write_log(trackpoint)
