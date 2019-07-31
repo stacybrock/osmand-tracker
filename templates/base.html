@@ -1,233 +1,125 @@
-<!DOCTYPE html >
-  <head>
-    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
-    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
-    <title>Tracker</title>
-    <style>
-      /* Always set the map height explicitly to define the size of the div
-       * element that contains the map. */
-      #map {
-        height: 100%;
-      }
-      /* Optional: Makes the sample page fill the window. */
-      html, body {
-        height: 600px;
-        margin: 0;
-        padding: 0;
-      }
-      #controls {
-        padding: 10px 0 0 0;
-        text-align: center;
-      }
-      #controls a {
-        padding: 0 10px;
-      }
-    </style>
-  </head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"/>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
 
-  <body>
-    <div id="map"></div>
-    <div id="controls">
-         {% if g.previous_track %}
-         <a href='?date={{ g.previous_track }}'>&lt;&lt;&lt; prev day</a>
-         {% endif %}
-         <a href="#" id="toggle_lines" onclick="toggleLines();return false;">show lines</a>
-         {% if g.next_track %}
-         <a href='?date={{ g.next_track }}'>next day &gt;&gt;&gt;</a>
-         {% endif %}
+  <link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.0/mapsjs-ui.css?dp-version=1549984893" />
+  <script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-core.js"></script>
+  <script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-service.js"></script>
+  <script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-ui.js"></script>
+  <script type="text/javascript" src="https://js.api.here.com/v3/3.0/mapsjs-mapevents.js"></script>
+
+  <link rel="stylesheet" type="text/css" href="static/style.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
+    <a class="navbar-brand" href="/view">Tracker</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCentered" aria-controls="navbarCentered" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse justify-content-md-center" id="navbarCentered">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link" href="#">&lt;&lt; Prev Day</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#" id="toggle_lines" onclick="toggleLines();return false;">Show Lines</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link disabled" href="#">Next Day &gt;&gt;</a>
+        </li>
+      </ul>
     </div>
-    <script>
-      var showLines = 0;
-      function toggleLines() {
-        var togglelink = document.getElementById("toggle_lines");
-        if (showLines == 0) {
-          showLines = 1;
-          togglelink.innerHTML = "hide lines";
-        } else {
-          showLines = 0;
-          togglelink.innerHTML = "show lines";
-        }
-        initMap({ redraw: 0, lines: showLines });
-      }
+  </nav>
 
-      var map;
-      function initMap({redraw=1, lines=0} = {}) {
-        if (redraw === 1) {
-          map = new google.maps.Map(document.getElementById('map'), {
-              center: new google.maps.LatLng(44.565132, -123.29309),
-              zoom: 12
-          });
-        } else {
-          currentBounds = map.getBounds();
-          map = new google.maps.Map(document.getElementById('map'), {
-              center: map.getCenter(),
-              zoom: map.getZoom()
-          });
-          map.panToBounds(currentBounds);
-        }
-        var infoWindow = new google.maps.InfoWindow;
-        var trackpoints = [];
+  <main role="main" class="container-fluid">
 
-        var displaydate = getQueryParam('date');
-        if (displaydate) {
-          var url = "track/"+displaydate;
-        } else {
-          var now = new Date();
-          now.setTime(now.getTime() - now.getTimezoneOffset()*60*1000);
-          var url = "track/"+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate());
-        }
+  <div style="padding-top: 4em;">
+    <div id="map"/>
+  </div>
 
-        downloadUrl(url, function(data) {
-          var xml = data.responseXML;
-          var markers = xml.documentElement.getElementsByTagName('marker');
+  </main>
+  <script  type="text/javascript" charset="UTF-8" >
+/**
+* Switches the map type to a topographical map
+*
+* @param  {H.Map} map    A HERE Map instance within the application
+* @param  {H.service.Platform} platform    A stub class to access HERE services
+*/
+function switchMapType(map, platform){
+  var aerialMapTileService = platform.getMapTileService({
+    type: 'aerial'
+  });
+  terrainMap = aerialMapTileService.createTileLayer(
+    'maptile',
+    'terrain.day',
+    pixelRatio === 1 ? 256 : 512,
+    'png8',
+    {ppi: pixelRatio === 1 ? undefined : 320}
+  );
+  map.setBaseLayer(terrainMap);
+}
 
-          // display points on map
-          var pointcolors = linearColorGradient('#FFFFFF', '#0000FF', markers.length);
-          var counter = 0;
-          Array.prototype.forEach.call(markers, function(markerElem) {
-            var timestamp = markerElem.getAttribute('time');
-            var point = new google.maps.LatLng(
-                parseFloat(markerElem.getAttribute('lat')),
-                parseFloat(markerElem.getAttribute('lon')));
-            var altitude = markerElem.getAttribute('altitude');
-            var speed = markerElem.getAttribute('speed');
-            var bearing = markerElem.getAttribute('bearing');
+/**
+* Initialize map
+*/
+function initMap({redraw=1, lines=0} = {}){
+  //Step 1: initialize communication with HERE maps platform
+  var platform = new H.service.Platform({
+    app_id: '{{ g.HERE_APP_ID }}',
+    app_code: '{{ g.HERE_APP_CODE }}',
+    useHTTPS: true
+  });
+  var pixelRatio = window.devicePixelRatio || 1;
+  var defaultLayers = platform.createDefaultLayers({
+    tileSize: pixelRatio === 1 ? 256 : 512,
+    ppi: pixelRatio === 1 ? undefined : 320
+  });
 
-            var infowincontent = document.createElement('div');
-            var strong = document.createElement('strong');
-            strong.textContent = timestamp;
-            infowincontent.appendChild(strong);
-            infowincontent.appendChild(document.createElement('br'));
-            var pointtext = document.createElement('text');
-            pointtext.textContent = "Location: "+point;
-            infowincontent.appendChild(pointtext);
-            infowincontent.appendChild(document.createElement('br'));
-            var alttext = document.createElement('text');
-            alttext.textContent = "Altitude: "+altitude;
-            infowincontent.appendChild(alttext);
-            infowincontent.appendChild(document.createElement('br'));
-            var speedtext = document.createElement('text');
-            speedtext.textContent = "Speed: "+speed;
-            infowincontent.appendChild(speedtext);
-            infowincontent.appendChild(document.createElement('br'));
-            var dirtext = document.createElement('text');
-            dirtext.textContent = "Bearing: "+bearing;
-            infowincontent.appendChild(dirtext);
+  //Step 2: initialize the map
+  var map = new H.Map(document.getElementById('map'),
+    defaultLayers.normal.map,{
+      center: {lat:27.98805, lng:86.9250},
+      zoom: 10,
+      pixelRatio: pixelRatio
+    });
 
-            var marker = new google.maps.Marker({
-              map: map,
-              position: point,
-              icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 4,
-                  fillColor: pointcolors[counter],
-                  fillOpacity: 1,
-                  strokeColor: 'black',
-                  strokeWeight: 2
-              },
-            });
+  //Step 3: make the map interactive
+  // MapEvents enables the event system
+  // Behavior implements default interactions for pan/zoom (also on mobile touch environments)
+  var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
 
-            trackpoints.push(point);
+  // Create the default UI components
+  var ui = H.ui.UI.createDefault(map, defaultLayers);
+  // Remove map settings as unnecessary
+  ui.removeControl('mapsettings');
 
-            marker.addListener('click', function() {
-              infoWindow.setContent(infowincontent);
-              infoWindow.open(map, marker);
-            });
+  // Now use the map as required...
+  switchMapType(map, platform);
+}
 
-            counter++;
-          });
+function toggleLines() {
+  var togglelink = document.getElementById("toggle_lines");
+  if (showLines == 0) {
+    showLines = 1;
+    togglelink.innerHTML = "Hide Lines";
+  } else {
+    showLines = 0;
+    togglelink.innerHTML = "Show Lines";
+  }
+  initMap({ redraw: 0, lines: showLines });
+}
 
-          if (lines == 1) {
-            var trackPath = new google.maps.Polyline({
-              path: trackpoints,
-              geodesic: true,
-              strokeColor: '#AAAAAA'
-            });
-            trackPath.setMap(map);
-          }
-
-          if (trackpoints.length !== 0) {
-            map.center = trackpoints[trackpoints.length-1];
-          }
-        });
-      }
-
-      function downloadUrl(url, callback) {
-        var request = window.ActiveXObject ?
-            new ActiveXObject('Microsoft.XMLHTTP') :
-            new XMLHttpRequest;
-
-        request.onreadystatechange = function() {
-          if (request.readyState == 4) {
-            request.onreadystatechange = doNothing;
-            callback(request, request.status);
-          }
-        };
-
-        request.open('GET', url, true);
-        request.send(null);
-      }
-
-      function doNothing() {}
-
-      function getQueryParam(param) {
-        var query = window.location.search.substring(1);
-        var vars = query.split("&");
-        for (var i=0; i<vars.length; i++) {
-          var pair = vars[i].split("=");
-          if(pair[0] == param){return pair[1];}
-        }
-        return(false);
-      }
-
-      function pad(value) {
-        if (value < 10) {
-            return "0"+value;
-        } else {
-            return value;
-        }
-      }
-
-      function hexToRgb(hex) {
-        var rgb = [];
-        for (var i=1; i<hex.length; i=i+2) {
-          rgb.push(parseInt(hex.substring(i,i+2), 16));
-        }
-        return rgb;
-      }
-
-      function rgbToHex(rgb) {
-        var tmp = [];
-        rgb.forEach(function(x, index) {
-          rgb[index] = Math.round(x);
-        });
-        for (var i=0; i<rgb.length; i++) {
-          if (rgb[i] < 16) {
-            tmp.push("0"+rgb[i].toString(16));
-          } else {
-            tmp.push(rgb[i].toString(16));
-          }
-        }
-        return "#"+tmp.join('');
-      }
-
-      function linearColorGradient(startHex, endHex, num) {
-        s = hexToRgb(startHex);
-        e = hexToRgb(endHex);
-        colors = [];
-        for (var i=0; i<num; i++) {
-          colors.push('');
-          rgbVector = [];
-          [0,1,2].forEach(function(x, index) {
-            rgbVector.push(s[x] + (i/(num-1))*(e[x]-s[x]));
-          });
-          colors[i] = rgbToHex(rgbVector);
-        }
-        return colors;
-      }
-    </script>
-    <script async defer
-         src="https://maps.googleapis.com/maps/api/js?key={{ g.GOOGLE_MAPS_API_KEY }}&callback=initMap">
-    </script>
-  </body>
+var showLines = 0;
+initMap();
+  </script>
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+</body>
 </html>

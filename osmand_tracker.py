@@ -9,23 +9,26 @@ import os
 import pendulum
 import secrets
 import pprint
-pp = pprint.PrettyPrinter(indent=2)
+pp_ = pprint.PrettyPrinter(indent=2)
+pp = pp_.pprint
 
 SCRIPTPATH = os.path.dirname(os.path.abspath(__file__))
+FLASK_DEBUG = os.getenv('FLASK_DEBUG', False)
 TRACKER_TIMEZONE = os.getenv('TRACKER_TIMEZONE', 'America/Los_Angeles')
 TRACKER_METRIC_UNITS = os.getenv('TRACKER_METRIC_UNITS') == 'True'
+TRACKER_DEVICE_KEY = os.getenv('TRACKER_DEVICE_KEY', secrets.token_hex(16))
 
 app = Flask(__name__)
 
 def write_log(trackpoint):
-    # Write raw trackpoint data to log file
+    """Write raw trackpoint data to log file"""
     now = pendulum.now(TRACKER_TIMEZONE)
     logfile = now.format('YYYYMMDD') + '.json'
     with open(f"{SCRIPTPATH}/logs/{logfile}", 'a') as f:
         f.write(json.dumps(trackpoint) + "\n")
 
 def write_track(trackpoint):
-    # Write trackpoint to track file
+    """Write trackpoint to track file"""
     now = pendulum.now(TRACKER_TIMEZONE)
     date = now.format('YYYYMMDD')
     trackfile = f"{SCRIPTPATH}/tracks/{date}.xml"
@@ -43,51 +46,63 @@ def write_track(trackpoint):
         return False
     else:
         marker['id'] = trackpoint['timestamp']
-        time = pendulum.from_timestamp(int(trackpoint['timestamp']) / 1000, tz=TRACKER_TIMEZONE)
+        time = pendulum.from_timestamp(int(trackpoint['timestamp']) / 1000,
+                                       tz=TRACKER_TIMEZONE)
         marker['time'] = time.to_rfc2822_string()
+
     if trackpoint['latitude'] == None:
         return False
     else:
         marker['lat'] = str(trackpoint['latitude'])
+
     if trackpoint['longitude'] == None:
         return False
     else:
         marker['lon'] = str(trackpoint['longitude'])
+
     if not trackpoint['hdop'] == None:
         marker['hdop'] = trackpoint['hdop']
+
     if not trackpoint['altitude'] == None:
         if TRACKER_METRIC_UNITS:
-            altitude = "{}m".format(trackpoint['altitude'])
+            alt_val = trackpoint['altitude']
+            alt_unit = 'm'
         else:
-            altitude = "{}ft".format(round(trackpoint['altitude'] * 3.280839895, 2))
-        marker['altitude'] = altitude
+            alt_val = round(trackpoint['altitude'] * 3.280839895, 2)
+            alt_unit = 'ft'
+        marker['altitude'] = f"{alt_val}{alt_unit}"
+
     if not trackpoint['speed'] == None:
         if TRACKER_METRIC_UNITS:
-            speed = "{}kph".format(round(trackpoint['speed'] * 0.001 * 60 * 60, 2))
+            speed_val = round(trackpoint['speed'] * 0.001 * 3600, 2)
+            speed_unit = 'kph'
         else:
-            speed = "{}mph".format(round(trackpoint['speed'] / 1000 * 60 * 60 * 0.62137, 2))
-        marker['speed'] = speed
+            speed_val = round(trackpoint['speed'] / 1000 * 3600 * 0.62137, 2)
+            speed_unit = 'mph'
+        marker['speed'] = f"{speed_val}{speed_unit}"
+
     if not trackpoint['bearing'] == None:
-        cardinal_directions = [ 'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N' ]
+        cardinal_directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N']
         marker['bearing'] = cardinal_directions[round((trackpoint['bearing'] % 360) / 45)]
 
     ET.SubElement(markers, 'marker', marker)
     tree.write(trackfile)
     return True
 
+
 def in_securezone(lat=0, lon=0):
-    # Returns True if coordinates are within the defined secure zone
+    """Returns True if coordinates are within the defined secure zone"""
     point = Point(lon, lat)
     try:
         with fiona.open(SCRIPTPATH + '/securezone.geojson', 'r') as securezone:
             for polygon in securezone:
                 g = polygon['geometry']
                 assert g['type'] == "Polygon"
-                # pp.pprint(g['coordinates'][0])
                 polygon = Polygon(g['coordinates'][0])
                 return polygon.contains(point)
     except OSError:
         return False
+
 
 def get_adjacent_tracks(date):
     date_str = date.format('YYYYMMDD')
@@ -104,25 +119,29 @@ def get_adjacent_tracks(date):
             next_track = tracks[i+1] if i+1 < len(tracks) else ''
     return (prev_track, next_track)
 
+
 @app.route('/')
 def index():
     return "These aren't the droids you're looking for."
 
+
 @app.route('/log', methods=['GET'])
 def log():
-    # Log trackpoint from OsmAnd
-    #
-    # Query Params:
-    #   lat: REQUIRED latitude value
-    #   lon: REQUIRED longitude value
-    #   timestamp: REQUIRED timestamp (example: 1508102861383)
-    #   hdop: horizontal dilution of precision
-    #   altitude:
-    #   speed:
-    #   bearing:
-    #   key: REQUIRED device key, must match key defined in environment variable
+    """Log trackpoint from OsmAnd
+
+    Query Params:
+      lat: REQUIRED latitude value
+      lon: REQUIRED longitude value
+      timestamp: REQUIRED timestamp (example: 1508102861383)
+      hdop: horizontal dilution of precision
+      altitude:
+      speed:
+      bearing:
+      key: REQUIRED device key, must match key defined in environment variable
+    """
     key = request.args.get('key')
-    if not key == os.getenv('TRACKER_DEVICE_KEY', secrets.token_hex(16)): abort(403)
+    if not key == TRACKER_DEVICE_KEY:
+        abort(403)
 
     trackpoint = {
         'latitude': float(request.args.get('lat')),
@@ -133,11 +152,12 @@ def log():
         'speed': float(request.args.get('speed')),
         'bearing': float(request.args.get('bearing'))
     }
-    pp.pprint(trackpoint)
     write_log(trackpoint)
-    if in_securezone(lat=trackpoint['latitude'], lon=trackpoint['longitude']): return ''
+    if in_securezone(lat=trackpoint['latitude'], lon=trackpoint['longitude']):
+        return ''
     write_track(trackpoint)
     return 'OK'
+
 
 @app.route('/track/<int:date>', methods=['GET'])
 def get_track(date):
@@ -147,6 +167,7 @@ def get_track(date):
             return Response(tf.read(), mimetype='text/xml')
     return ''
 
+
 @app.route('/view', methods=['GET'])
 def view():
     if request.args.get('date'):
@@ -154,11 +175,11 @@ def view():
     else:
         date = pendulum.now(TRACKER_TIMEZONE)
     (g.previous_track, g.next_track) = get_adjacent_tracks(date)
-    print("previous_track: "+g.previous_track)
-    print("next_track: "+g.next_track)
 
-    g.GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
+    g.HERE_APP_ID = os.getenv('HERE_APP_ID', '')
+    g.HERE_APP_CODE = os.getenv('HERE_APP_CODE', '')
     return render_template('base.html')
 
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=FLASK_DEBUG)
