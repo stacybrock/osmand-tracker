@@ -19,4 +19,4 @@ pytzdata==2018.5
 s3transfer==0.1.13
 Shapely==1.6.4.post1
 six==1.11.0
-Werkzeug==0.14.1
+Werkzeug==0.15.3
