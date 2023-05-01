@@ -6,7 +6,7 @@ cligj==0.4.0
 Cython==0.28.2
 docutils==0.14
 Fiona==1.7.11.post2
-Flask==1.0.2
+Flask==2.3.2
 itsdangerous==0.24
 Jinja2==2.11.3
 jmespath==0.9.3
